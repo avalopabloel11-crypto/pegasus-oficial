@@ -3,7 +3,7 @@ import { useState } from 'react';
 
 export default function Catalog({ designs, whatsapp, custom }: { designs:any[]; whatsapp:string; custom:Record<string,string> }) {
   const [filter,setFilter]=useState('todos');
-  const cats=[['todos','TODOS'],['nuevos','NUEVOS'],['futbol','FÚTBOL'],['gotico','GÓTICO'],['otros','OTROS']];
+  const cats=[['todos','TODOS'],['match','MATCH'],['futbol','FÚTBOL'],['anime','ANIME'],['empresariales','EMPRESARIALES']];
   const list=designs.filter(d=>filter==='todos'||d.category===filter);
   const wa=(d?:any)=>{ const msg=d?`Hola Pegasus 👋 Quiero consultar por el diseño #${d.code} (${d.name}).`:`Hola Pegasus 👋 Quiero consultar por un diseño personalizado. Necesito asesoramiento sobre medidas, tipo de diseño y precio.`; window.open(`https://wa.me/${whatsapp}?text=${encodeURIComponent(msg)}`,'_blank'); };
   return <>
