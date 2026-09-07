@@ -1,9 +1,254 @@
 'use client';
-import {useState} from 'react';
-import {createBrowserSupabase} from '@/lib/supabase';
-export default function AdminPanel({designs,content}:{designs:any[];content:any[]}){const [items,setItems]=useState(designs);const [name,setName]=useState('');const [category,setCategory]=useState('otros');const [size,setSize]=useState('');const [price,setPrice]=useState('');const [file,setFile]=useState<File|null>(null);const [saving,setSaving]=useState(false);const [msg,setMsg]=useState('');const copy=Object.fromEntries(content.map(x=>[x.key,x.value]));
- const add=async(e:any)=>{e.preventDefault();if(!file)return;setSaving(true);setMsg('');const s=createBrowserSupabase();const code=String(Math.max(0,...items.map(x=>Number(x.code)||0))+1).padStart(3,'0');const path=`${code}-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g,'')}`;const up=await s.storage.from('designs').upload(path,file,{upsert:false});if(up.error){setMsg(up.error.message);setSaving(false);return}const {data:url}=s.storage.from('designs').getPublicUrl(path);const ins=await s.from('designs').insert({code,name,category,size,price,image_url:url.publicUrl,storage_path:path});if(ins.error){await s.storage.from('designs').remove([path]);setMsg(ins.error.message)}else{const {data:latest}=await s.from('designs').select('*').order('created_at',{ascending:false});setItems(latest??[]);setName('');setSize('');setPrice('');setFile(null);setMsg('Diseño publicado.')}setSaving(false)};
- const del=async(id:string,path:string)=>{if(!confirm('¿Eliminar este diseño?'))return;const s=createBrowserSupabase();const r=await s.from('designs').delete().eq('id',id);if(r.error){setMsg(r.error.message);return}await s.storage.from('designs').remove([path]);setItems(items.filter(x=>x.id!==id));};
- const updateText=async(key:string,value:string)=>{const s=createBrowserSupabase();const r=await s.from('site_content').upsert({key,value},{onConflict:'key'});setMsg(r.error?r.error.message:`Texto actualizado: ${key}`)};
- const logout=async()=>{await createBrowserSupabase().auth.signOut();location.href='/'};
- return <main className="admin"><header><div><span className="kicker">PEGASUS / ADMIN</span><h1>Panel de administración</h1></div><button className="danger" onClick={logout}>SALIR</button></header><section className="admin-card"><h2>Agregar diseño</h2><form onSubmit={add}><div className="grid"><label className="field">Nombre<input value={name} onChange={e=>setName(e.target.value)} required/></label><label className="field">Categoría<select value={category} onChange={e=>setCategory(e.target.value)}><option value="nuevos">Nuevos</option><option value="futbol">Fútbol</option><option value="gotico">Gótico</option><option value="otros">Otros</option></select></label></div><div className="grid"><label className="field">Medida<input value={size} onChange={e=>setSize(e.target.value)} placeholder="12 × 10 cm"/></label><label className="field">Precio<input value={price} onChange={e=>setPrice(e.target.value)} placeholder="$ 8.000"/></label></div><label className="field">Imagen<input type="file" accept="image/png,image/jpeg,image/webp" onChange={e=>setFile(e.target.files?.[0]||null)} required/></label><button className="primary" disabled={saving}>{saving?'PUBLICANDO...':'+ PUBLICAR DISEÑO'}</button></form></section><section className="admin-card"><h2>Textos de la página</h2>{['hero_title','hero_description','custom_title','custom_description','custom_button'].map(key=><label className="field" key={key}>{key}<textarea defaultValue={copy[key]||''} rows={2} onBlur={e=>updateText(key,e.currentTarget.value)}/></label>)}<p className="muted">Los cambios se guardan al salir de cada campo.</p></section><section className="admin-card"><h2>Diseños cargados</h2>{items.map(d=><div className="row" key={d.id}><img className="thumb" src={d.image_url} alt=""/><div style={{flex:1}}><strong>#{d.code} · {d.name}</strong><div className="muted">{d.category} · {d.size||'Sin medida'}</div></div><button className="danger" onClick={()=>del(d.id,d.storage_path)}>ELIMINAR</button></div>)}</section>{msg&&<p className="muted">{msg}</p>}</main>}
+
+import { useState } from 'react';
+import { createBrowserSupabase } from '@/lib/supabase';
+
+export default function AdminPanel({
+  designs,
+  content,
+}: {
+  designs: any[];
+  content: any[];
+}) {
+  const [items, setItems] = useState(designs);
+  const [name, setName] = useState('');
+  const [category, setCategory] = useState('match');
+  const [size, setSize] = useState('');
+  const [price, setPrice] = useState('');
+  const [file, setFile] = useState<File | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState('');
+
+  const copy = Object.fromEntries(content.map((x) => [x.key, x.value]));
+
+  const add = async (e: any) => {
+    e.preventDefault();
+
+    if (!file) return;
+
+    setSaving(true);
+    setMsg('');
+
+    const s = createBrowserSupabase();
+
+    const code = String(
+      Math.max(0, ...items.map((x) => Number(x.code) || 0)) + 1
+    ).padStart(3, '0');
+
+    const path = `${code}-${Date.now()}-${file.name.replace(
+      /[^a-zA-Z0-9._-]/g,
+      ''
+    )}`;
+
+    const up = await s.storage
+      .from('designs')
+      .upload(path, file, { upsert: false });
+
+    if (up.error) {
+      setMsg(up.error.message);
+      setSaving(false);
+      return;
+    }
+
+    const { data: url } = s.storage.from('designs').getPublicUrl(path);
+
+    const ins = await s.from('designs').insert({
+      code,
+      name,
+      category,
+      size,
+      price,
+      image_url: url.publicUrl,
+      storage_path: path,
+    });
+
+    if (ins.error) {
+      await s.storage.from('designs').remove([path]);
+      setMsg(ins.error.message);
+    } else {
+      const { data: latest } = await s
+        .from('designs')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      setItems(latest ?? []);
+      setName('');
+      setSize('');
+      setPrice('');
+      setFile(null);
+      setMsg('Diseño publicado.');
+    }
+
+    setSaving(false);
+  };
+
+  const del = async (id: string, path: string) => {
+    if (!confirm('¿Eliminar este diseño?')) return;
+
+    const s = createBrowserSupabase();
+
+    const r = await s.from('designs').delete().eq('id', id);
+
+    if (r.error) {
+      setMsg(r.error.message);
+      return;
+    }
+
+    await s.storage.from('designs').remove([path]);
+
+    setItems(items.filter((x) => x.id !== id));
+  };
+
+  const updateText = async (key: string, value: string) => {
+    const s = createBrowserSupabase();
+
+    const r = await s
+      .from('site_content')
+      .upsert({ key, value }, { onConflict: 'key' });
+
+    setMsg(r.error ? r.error.message : `Texto actualizado: ${key}`);
+  };
+
+  const logout = async () => {
+    await createBrowserSupabase().auth.signOut();
+    location.href = '/';
+  };
+
+  return (
+    <main className="admin">
+      <header>
+        <div>
+          <span className="kicker">PEGASUS / ADMIN</span>
+          <h1>Panel de administración</h1>
+        </div>
+
+        <button className="danger" onClick={logout}>
+          SALIR
+        </button>
+      </header>
+
+      <section className="admin-card">
+        <h2>Agregar diseño</h2>
+
+        <form onSubmit={add}>
+          <div className="grid">
+            <label className="field">
+              Nombre
+              <input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                required
+              />
+            </label>
+
+            <label className="field">
+              Categoría
+              <select
+                value={category}
+                onChange={(e) => setCategory(e.target.value)}
+              >
+                <option value="match">Match</option>
+                <option value="futbol">Fútbol</option>
+                <option value="anime">Anime</option>
+                <option value="empresariales">Empresariales</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="grid">
+            <label className="field">
+              Medida
+              <input
+                value={size}
+                onChange={(e) => setSize(e.target.value)}
+                placeholder="12 × 10 cm"
+              />
+            </label>
+
+            <label className="field">
+              Precio
+              <input
+                value={price}
+                onChange={(e) => setPrice(e.target.value)}
+                placeholder="$ 8.000"
+              />
+            </label>
+          </div>
+
+          <label className="field">
+            Imagen
+            <input
+              type="file"
+              accept="image/png,image/jpeg,image/webp"
+              onChange={(e) =>
+                setFile(e.target.files?.[0] || null)
+              }
+              required
+            />
+          </label>
+
+          <button className="primary" disabled={saving}>
+            {saving ? 'PUBLICANDO...' : '+ PUBLICAR DISEÑO'}
+          </button>
+        </form>
+      </section>
+
+      <section className="admin-card">
+        <h2>Textos de la página</h2>
+
+        {[
+          'hero_title',
+          'hero_description',
+          'custom_title',
+          'custom_description',
+          'custom_button',
+        ].map((key) => (
+          <label className="field" key={key}>
+            {key}
+
+            <textarea
+              defaultValue={copy[key] || ''}
+              rows={2}
+              onBlur={(e) =>
+                updateText(key, e.currentTarget.value)
+              }
+            />
+          </label>
+        ))}
+
+        <p className="muted">
+          Los cambios se guardan al salir de cada campo.
+        </p>
+      </section>
+
+      <section className="admin-card">
+        <h2>Diseños cargados</h2>
+
+        {items.map((d) => (
+          <div className="row" key={d.id}>
+            <img className="thumb" src={d.image_url} alt="" />
+
+            <div style={{ flex: 1 }}>
+              <strong>
+                #{d.code} · {d.name}
+              </strong>
+
+              <div className="muted">
+                {d.category} · {d.size || 'Sin medida'}
+              </div>
+            </div>
+
+            <button
+              className="danger"
+              onClick={() => del(d.id, d.storage_path)}
+            >
+              ELIMINAR
+            </button>
+          </div>
+        ))}
+      </section>
+
+      {msg && <p className="muted">{msg}</p>}
+    </main>
+  );
+}
