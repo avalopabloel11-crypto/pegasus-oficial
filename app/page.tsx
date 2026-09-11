@@ -14,6 +14,6 @@ export default async function Home() {
     <main className="main"><section className="intro"><span className="kicker">PEGASUS EMBROIDERY</span><h1>{copy.hero_title || 'Elegí tu diseño.'}</h1><p>{copy.hero_description || 'Encontrá un diseño y consultanos para bordarlo en tu prenda.'}</p></section>
       <Catalog designs={designs ?? []} whatsapp={process.env.WHATSAPP_NUMBER || '5493436122634'} custom={copy} />
     </main>
-    <footer className="footer"><strong>PEGASUS</strong><p>Diseños para bordado</p><a className="admin-link" href="/admin">ADMINISTRAR</a></footer>
+    <footer className="footer"><strong>PEGASUS</strong><p>Diseños para bordado</p><a href="/preguntas-frecuentes" style={{display:'inline-block', background:'#f5a623', color:'#000', fontWeight:'bold', padding:'10px 20px', borderRadius:'8px', textDecoration:'none', margin:'8px'}}>PREGUNTAS FRECUENTES</a><a className="admin-link" href="/admin">ADMINISTRAR</a></footer>
   </>;
 }
