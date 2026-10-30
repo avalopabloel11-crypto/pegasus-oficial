@@ -1,0 +1,154 @@
+/* Estilos extra del inventario de prendas (el resto viene de ../crm/crm.css) */
+
+.pr-head-total {
+  text-align: right;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+
+.pr-head-total small {
+  display: block;
+  margin-top: 3px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--muted);
+}
+
+.pr-scroll {
+  overflow-x: auto;
+  margin-top: 12px;
+  border: 1px solid #222;
+  border-radius: 10px;
+}
+
+.pr-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+
+.pr-table th,
+.pr-table td {
+  padding: 8px 6px;
+  text-align: center;
+  border-bottom: 1px solid #1d1d1d;
+  white-space: nowrap;
+}
+
+.pr-table thead th {
+  color: var(--accent);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  background: #0b0b0b;
+}
+
+.pr-table tbody th {
+  text-align: left;
+  padding-left: 12px;
+  color: #ddd;
+  font-weight: 700;
+  position: sticky;
+  left: 0;
+  background: #111;
+}
+
+.pr-table tfoot td,
+.pr-table tfoot th {
+  border-bottom: 0;
+  color: var(--muted);
+  font-size: 11px;
+}
+
+.pr-table .pr-total {
+  color: #ddd;
+  font-weight: 800;
+}
+
+.pr-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.pr-cell button {
+  width: 24px;
+  height: 28px;
+  border: 1px solid #333;
+  background: #0d0d0d;
+  color: #ddd;
+  border-radius: 6px;
+  font-size: 14px;
+  line-height: 1;
+  padding: 0;
+}
+
+.pr-cell input {
+  width: 44px;
+  height: 28px;
+  text-align: center;
+  background: #090909;
+  border: 1px solid #303030;
+  border-radius: 6px;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  -moz-appearance: textfield;
+}
+
+.pr-cell input::-webkit-outer-spin-button,
+.pr-cell input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.pr-cell.low input {
+  border-color: #6b5a2a;
+  color: #e6c76a;
+}
+
+.pr-cell.zero input {
+  border-color: #5b2a2a;
+  color: #e99;
+}
+
+.pr-cell .pr-x {
+  width: 24px;
+  color: #e99;
+  border-color: #5b2a2a;
+  font-size: 12px;
+}
+
+.pr-empty-cell {
+  color: #444;
+}
+
+.inv-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.45;
+  margin: 4px 0 0;
+}
+
+.pr-add {
+  display: grid;
+  grid-template-columns: 1fr 1fr 90px auto;
+  gap: 8px;
+  align-items: end;
+  margin-top: 12px;
+}
+
+.pr-add .field {
+  margin: 0;
+}
+
+.pr-add .primary {
+  width: auto;
+  padding: 11px 16px;
+}
+
+@media (max-width: 640px) {
+  .pr-add {
+    grid-template-columns: 1fr 1fr;
+  }
+}

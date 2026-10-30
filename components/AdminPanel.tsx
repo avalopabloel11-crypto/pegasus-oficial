@@ -134,6 +134,9 @@ export default function AdminPanel({
         <a className="filter" href="/admin/crm" style={{ textDecoration: 'none' }}>
           CRM
         </a>
+        <a className="filter" href="/admin/inventario" style={{ textDecoration: 'none' }}>
+          INVENTARIO
+        </a>
       </nav>
 
       <section className="admin-card">

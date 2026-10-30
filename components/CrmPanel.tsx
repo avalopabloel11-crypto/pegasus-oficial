@@ -474,7 +474,7 @@ export default function CrmPanel({
   };
 
   const clienteById = useMemo(
-    () => new Map(clientes.map((c) => [c.id, c])),
+    () => new Map<string, Cliente>(clientes.map((c) => [c.id, c])),
     [clientes]
   );
 
@@ -1006,6 +1006,9 @@ export default function CrmPanel({
         </a>
         <a className="filter active" href="/admin/crm">
           CRM
+        </a>
+        <a className="filter" href="/admin/inventario">
+          INVENTARIO
         </a>
       </nav>
 
