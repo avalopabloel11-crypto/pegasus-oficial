@@ -37,6 +37,9 @@ export const ESTADOS_CON_SALDO: Estado[] = [
   'entregado',
 ];
 
+/** Pedidos que ya tienen prendas reservadas (todavía no entregados). */
+export const ESTADOS_RESERVA: Estado[] = ['aprobado', 'en_produccion', 'listo'];
+
 export const TIPOS = ['bordado', 'digitalizacion', 'otro'] as const;
 
 export const TIPO_LABEL: Record<(typeof TIPOS)[number], string> = {

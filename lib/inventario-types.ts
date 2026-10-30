@@ -36,6 +36,33 @@ export type Prenda = {
   created_at: string;
 };
 
+/** Un movimiento del historial. cantidad con signo: + entra, − sale. */
+export type Movimiento = {
+  id: string;
+  prenda_id: string | null;
+  prenda_nombre: string | null;
+  talle: string;
+  color: string;
+  tipo: 'entrada' | 'salida' | 'ajuste';
+  cantidad: number;
+  stock_resultante: number;
+  motivo: string | null;
+  pedido_id: string | null;
+  created_at: string;
+};
+
+/** Prenda del inventario que lleva un pedido del CRM. */
+export type LineaPedido = {
+  id: string;
+  pedido_id: string;
+  prenda_id: string;
+  talle: string;
+  color: string;
+  cantidad: number;
+  /** true cuando el pedido se entregó y el stock ya bajó. */
+  descontado: boolean;
+};
+
 /** Cantidad de una combinación de talle y color de un modelo. */
 export type Variante = {
   id: string;

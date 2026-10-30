@@ -5,6 +5,8 @@ import type { ActionResult } from '@/lib/crm-types';
 import {
   TALLES,
   ordenTalle,
+  type LineaPedido,
+  type Movimiento,
   type Prenda,
   type Variante,
 } from '@/lib/inventario-types';
@@ -27,13 +29,28 @@ const peso = (n: number) =>
     maximumFractionDigits: 0,
   }).format(n);
 
+const fmtFechaHora = (ts: string) =>
+  new Date(ts).toLocaleString('es-AR', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
 type Exec = (p: Promise<ActionResult>, okMsg: string) => Promise<boolean>;
 type FieldEvent = ChangeEvent<
   HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
 >;
 
-const estadoCelda = (cantidad: number, minimo: number): 'ok' | 'bajo' | 'cero' =>
-  cantidad <= 0 ? 'cero' : minimo > 0 && cantidad <= minimo ? 'bajo' : 'ok';
+/** Se evalúa sobre lo disponible (en mano − reservado para pedidos). */
+const estadoCelda = (
+  disponible: number,
+  minimo: number
+): 'ok' | 'bajo' | 'cero' =>
+  disponible <= 0 ? 'cero' : minimo > 0 && disponible <= minimo ? 'bajo' : 'ok';
+
+const claveVar = (prenda_id: string, talle: string, color: string) =>
+  `${prenda_id}|${talle}|${color}`;
 
 // ---------- formularios ----------
 
@@ -195,7 +212,8 @@ function AgregarStockForm({
       </div>
       <p className="inv-hint">
         Si ese talle y color ya existen en el modelo, la cantidad se suma a lo que
-        hay.
+        hay. Con cantidad 0 solo se crea la combinación (sirve para poder asignarla a
+        un pedido antes de tener stock).
       </p>
       <div className="crm-form-actions">
         <button type="button" className="crm-cancel" onClick={onCancel}>
@@ -210,71 +228,91 @@ function AgregarStockForm({
 
 function Celda({
   v,
+  reservado,
   minimo,
   busy,
   exec,
 }: {
   v: Variante;
+  reservado: number;
   minimo: number;
   busy: boolean;
   exec: Exec;
 }) {
-  const est = estadoCelda(v.cantidad, minimo);
+  const est = estadoCelda(v.cantidad - reservado, minimo);
+  const falta = reservado > v.cantidad;
 
   return (
-    <span className={`pr-cell ${est === 'cero' ? 'zero' : est === 'bajo' ? 'low' : ''}`}>
-      <button
-        disabled={busy || v.cantidad <= 0}
-        aria-label="Restar una unidad"
-        onClick={() => exec(cambiarStock(v.id, -1), '')}
+    <span className="pr-cellwrap">
+      <span
+        className={`pr-cell ${
+          est === 'cero' ? 'zero' : est === 'bajo' ? 'low' : ''
+        }`}
       >
-        −
-      </button>
-
-      <input
-        key={v.cantidad}
-        type="number"
-        min={0}
-        step={1}
-        defaultValue={v.cantidad}
-        disabled={busy}
-        aria-label={`Cantidad ${v.color} talle ${v.talle}`}
-        onBlur={(e) => {
-          const crudo = e.currentTarget.value;
-          const n = Math.round(Number(crudo));
-          if (crudo !== '' && Number.isFinite(n) && n >= 0 && n !== v.cantidad) {
-            exec(fijarStock(v.id, n), '');
-          } else {
-            e.currentTarget.value = String(v.cantidad);
-          }
-        }}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') e.currentTarget.blur();
-        }}
-      />
-
-      <button
-        disabled={busy}
-        aria-label="Sumar una unidad"
-        onClick={() => exec(cambiarStock(v.id, 1), '')}
-      >
-        +
-      </button>
-
-      {v.cantidad === 0 && (
         <button
-          className="pr-x"
+          disabled={busy || v.cantidad <= 0}
+          aria-label="Restar una unidad"
+          onClick={() => exec(cambiarStock(v.id, -1), '')}
+        >
+          −
+        </button>
+
+        <input
+          key={v.cantidad}
+          type="number"
+          min={0}
+          step={1}
+          defaultValue={v.cantidad}
           disabled={busy}
-          aria-label="Quitar esta combinación"
-          title="Quitar esta combinación de talle y color"
-          onClick={() => {
-            if (confirm(`¿Quitar ${v.color} talle ${v.talle} de este modelo?`)) {
-              exec(eliminarVariante(v.id), 'Combinación quitada.');
+          aria-label={`Cantidad ${v.color} talle ${v.talle}`}
+          onBlur={(e) => {
+            const crudo = e.currentTarget.value;
+            const n = Math.round(Number(crudo));
+            if (crudo !== '' && Number.isFinite(n) && n >= 0 && n !== v.cantidad) {
+              exec(fijarStock(v.id, n), '');
+            } else {
+              e.currentTarget.value = String(v.cantidad);
             }
           }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') e.currentTarget.blur();
+          }}
+        />
+
+        <button
+          disabled={busy}
+          aria-label="Sumar una unidad"
+          onClick={() => exec(cambiarStock(v.id, 1), '')}
         >
-          ✕
+          +
         </button>
+
+        {v.cantidad === 0 && reservado === 0 && (
+          <button
+            className="pr-x"
+            disabled={busy}
+            aria-label="Quitar esta combinación"
+            title="Quitar esta combinación de talle y color"
+            onClick={() => {
+              if (confirm(`¿Quitar ${v.color} talle ${v.talle} de este modelo?`)) {
+                exec(eliminarVariante(v.id), 'Combinación quitada.');
+              }
+            }}
+          >
+            ✕
+          </button>
+        )}
+      </span>
+
+      {reservado > 0 && (
+        <small
+          className={`pr-res ${falta ? 'falta' : ''}`}
+          title="Prendas apartadas para pedidos aprobados o en producción"
+        >
+          {falta
+            ? `res. ${reservado} · faltan ${reservado - v.cantidad}`
+            : `res. ${reservado}`}
+        </small>
       )}
     </span>
   );
@@ -285,11 +323,19 @@ function Celda({
 export default function InventarioPanel({
   prendas,
   variantes,
+  movimientos,
+  reservas,
+  pedidoLabels,
   loadError,
+  aviso,
 }: {
   prendas: Prenda[];
   variantes: Variante[];
+  movimientos: Movimiento[];
+  reservas: LineaPedido[];
+  pedidoLabels: Record<string, string>;
   loadError: string | null;
+  aviso: string | null;
 }) {
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
@@ -299,6 +345,9 @@ export default function InventarioPanel({
   const [nuevo, setNuevo] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [agregando, setAgregando] = useState<string | null>(null);
+
+  const [verHist, setVerHist] = useState(false);
+  const [histPrenda, setHistPrenda] = useState('');
 
   const exec: Exec = async (p, okMsg) => {
     setBusy(true);
@@ -324,30 +373,46 @@ export default function InventarioPanel({
     return m;
   }, [variantes]);
 
+  // Cantidad reservada por modelo + talle + color.
+  const reservado = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const r of reservas) {
+      const k = claveVar(r.prenda_id, r.talle, r.color);
+      m.set(k, (m.get(k) ?? 0) + r.cantidad);
+    }
+    return m;
+  }, [reservas]);
+
   const todosColores = useMemo(
     () => Array.from(new Set(variantes.map((v) => v.color))).sort(),
     [variantes]
   );
 
   const stats = useMemo(() => {
-    let unidades = 0;
+    let enMano = 0;
     let reponer = 0;
     let valor = 0;
     for (const p of prendas) {
       for (const v of porPrenda.get(p.id) ?? []) {
-        unidades += v.cantidad;
+        const res = reservado.get(claveVar(p.id, v.talle, v.color)) ?? 0;
+        enMano += v.cantidad;
         valor += v.cantidad * (p.costo_unitario ?? 0);
-        if (estadoCelda(v.cantidad, p.stock_minimo) !== 'ok') reponer += 1;
+        if (estadoCelda(v.cantidad - res, p.stock_minimo) !== 'ok') reponer += 1;
       }
     }
-    return { modelos: prendas.length, unidades, reponer, valor };
-  }, [prendas, porPrenda]);
+    const reservadas = reservas.reduce((s, r) => s + r.cantidad, 0);
+    return { enMano, reservadas, reponer, valor };
+  }, [prendas, porPrenda, reservado, reservas]);
 
   const qn = q.trim().toLowerCase();
 
   const necesitaReponer = (p: Prenda) =>
     (porPrenda.get(p.id) ?? []).some(
-      (v) => estadoCelda(v.cantidad, p.stock_minimo) !== 'ok'
+      (v) =>
+        estadoCelda(
+          v.cantidad - (reservado.get(claveVar(p.id, v.talle, v.color)) ?? 0),
+          p.stock_minimo
+        ) !== 'ok'
     );
 
   const visibles = prendas.filter((p) => {
@@ -389,8 +454,17 @@ export default function InventarioPanel({
     );
     const total = vars.reduce((s, v) => s + v.cantidad, 0);
     const faltan = vars.filter(
-      (v) => estadoCelda(v.cantidad, p.stock_minimo) !== 'ok'
+      (v) =>
+        estadoCelda(
+          v.cantidad - (reservado.get(claveVar(p.id, v.talle, v.color)) ?? 0),
+          p.stock_minimo
+        ) !== 'ok'
     ).length;
+
+    // Pedidos que piden una combinación que ni siquiera está cargada.
+    const sinCargar = reservas.filter(
+      (r) => r.prenda_id === p.id && !celdas.has(`${r.color}|${r.talle}`)
+    );
 
     return (
       <div className="crm-item" key={p.id}>
@@ -398,9 +472,7 @@ export default function InventarioPanel({
           <div>
             <strong>{p.nombre}</strong>{' '}
             {faltan > 0 && (
-              <span className="crm-badge bajo">
-                {faltan} para reponer
-              </span>
+              <span className="crm-badge bajo">{faltan} para reponer</span>
             )}
             <div className="crm-sub">
               {p.proveedor && <>{p.proveedor} · </>}
@@ -412,7 +484,7 @@ export default function InventarioPanel({
 
           <div className="pr-head-total">
             {total}
-            <small>unidades</small>
+            <small>en mano</small>
           </div>
         </div>
 
@@ -447,6 +519,7 @@ export default function InventarioPanel({
                             {v ? (
                               <Celda
                                 v={v}
+                                reservado={reservado.get(claveVar(p.id, t, c)) ?? 0}
                                 minimo={p.stock_minimo}
                                 busy={busy}
                                 exec={exec}
@@ -477,6 +550,15 @@ export default function InventarioPanel({
               </tfoot>
             </table>
           </div>
+        )}
+
+        {sinCargar.length > 0 && (
+          <p className="inv-hint" style={{ color: '#e99' }}>
+            Pedidos que piden prendas que no están cargadas:{' '}
+            {sinCargar
+              .map((r) => `${r.color} talle ${r.talle} ×${r.cantidad}`)
+              .join(' · ')}
+          </p>
         )}
 
         {agregando === p.id && (
@@ -514,6 +596,10 @@ export default function InventarioPanel({
       </div>
     );
   };
+
+  const movsVisibles = movimientos
+    .filter((m) => !histPrenda || m.prenda_id === histPrenda)
+    .slice(0, 100);
 
   return (
     <main className="admin crm">
@@ -559,14 +645,16 @@ export default function InventarioPanel({
         </div>
       )}
 
+      {aviso && !loadError && <div className="crm-error">{aviso}</div>}
+
       <div className="crm-stats">
         <div className="crm-stat">
-          <span className="muted">Modelos</span>
-          <b>{stats.modelos}</b>
+          <span className="muted">Prendas en mano</span>
+          <b>{stats.enMano}</b>
         </div>
         <div className="crm-stat">
-          <span className="muted">Prendas en stock</span>
-          <b>{stats.unidades}</b>
+          <span className="muted">Reservadas p/ pedidos</span>
+          <b>{stats.reservadas}</b>
         </div>
         <div className={`crm-stat ${stats.reponer ? 'warn' : ''}`}>
           <span className="muted">Para reponer</span>
@@ -630,6 +718,86 @@ export default function InventarioPanel({
           </p>
         )}
         {visibles.map(renderPrenda)}
+
+        <p className="inv-hint">
+          "res." es lo apartado para pedidos aprobados, en producción o listos. Al
+          marcar un pedido como Entregado, esas prendas se descuentan solas.
+        </p>
+      </section>
+
+      <section className="admin-card">
+        <div className="crm-toolbar">
+          <h2 style={{ margin: 0, flex: 1 }}>Historial de movimientos</h2>
+          <button className="crm-add" onClick={() => setVerHist(!verHist)}>
+            {verHist ? 'OCULTAR' : 'VER HISTORIAL'}
+          </button>
+        </div>
+
+        {verHist && (
+          <>
+            <div className="crm-toolbar">
+              <select
+                className="crm-estado"
+                style={{ flex: 1 }}
+                value={histPrenda}
+                onChange={(e) => setHistPrenda(e.target.value)}
+              >
+                <option value="">Todos los modelos</option>
+                {prendas.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {movsVisibles.length === 0 ? (
+              <p className="crm-empty">
+                Todavía no hay movimientos. Se registran solos cada vez que sumás,
+                restás o entregás un pedido.
+              </p>
+            ) : (
+              <div className="pr-scroll">
+                <table className="pr-table pr-hist">
+                  <thead>
+                    <tr>
+                      <th>FECHA</th>
+                      <th>MODELO</th>
+                      <th>COLOR · TALLE</th>
+                      <th>MOV.</th>
+                      <th>STOCK</th>
+                      <th>MOTIVO / PEDIDO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {movsVisibles.map((m) => (
+                      <tr key={m.id}>
+                        <td>{fmtFechaHora(m.created_at)}</td>
+                        <td>{m.prenda_nombre ?? '(modelo eliminado)'}</td>
+                        <td>
+                          {m.color} · {m.talle}
+                        </td>
+                        <td className={m.cantidad > 0 ? 'pr-plus' : 'pr-minus'}>
+                          {m.cantidad > 0 ? '+' : '−'}
+                          {Math.abs(m.cantidad)}
+                        </td>
+                        <td>{m.stock_resultante}</td>
+                        <td>
+                          {[
+                            m.motivo,
+                            m.pedido_id ? pedidoLabels[m.pedido_id] : null,
+                          ]
+                            .filter(Boolean)
+                            .join(' · ') || '—'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
       </section>
     </main>
   );

@@ -17,6 +17,12 @@ import {
   type Seguimiento,
 } from '@/lib/crm-types';
 import {
+  ordenTalle,
+  type LineaPedido,
+  type Prenda,
+  type Variante,
+} from '@/lib/inventario-types';
+import {
   actualizarCliente,
   actualizarPedido,
   cambiarEstadoPedido,
@@ -157,8 +163,13 @@ function ClienteForm({
   );
 }
 
+type LineaForm = { variante_id: string; cantidad: string };
+
 function PedidoForm({
   clientes,
+  prendas,
+  variantes,
+  lineasPedidos,
   fixedClienteId,
   initial,
   busy,
@@ -166,6 +177,9 @@ function PedidoForm({
   onCancel,
 }: {
   clientes: Cliente[];
+  prendas: Prenda[];
+  variantes: Variante[];
+  lineasPedidos: LineaPedido[];
   fixedClienteId?: string;
   initial?: Pedido;
   busy: boolean;
@@ -179,9 +193,63 @@ function PedidoForm({
     sena_monto: string;
     estado: string;
     fecha_entrega: string;
+    lineas: {
+      prenda_id: string;
+      talle: string;
+      color: string;
+      cantidad: string;
+    }[];
   }) => Promise<boolean>;
   onCancel: () => void;
 }) {
+  // Opciones del selector: cada combinación de modelo + color + talle que existe en el inventario.
+  const nombrePrenda = new Map<string, string>(prendas.map((p) => [p.id, p.nombre]));
+  const opciones = variantes
+    .filter((v) => nombrePrenda.has(v.prenda_id))
+    .sort(
+      (a, b) =>
+        (nombrePrenda.get(a.prenda_id) ?? '').localeCompare(
+          nombrePrenda.get(b.prenda_id) ?? '',
+          'es'
+        ) ||
+        a.color.localeCompare(b.color, 'es') ||
+        ordenTalle(a.talle) - ordenTalle(b.talle)
+    );
+
+  // Las prendas ya descontadas (pedido entregado) no se pueden editar.
+  const propias = initial
+    ? lineasPedidos.filter((l) => l.pedido_id === initial.id)
+    : [];
+  const bloqueadas = propias.filter((l) => l.descontado);
+
+  const [lineas, setLineas] = useState<LineaForm[]>(
+    propias
+      .filter((l) => !l.descontado)
+      .flatMap((l) => {
+        const v = variantes.find(
+          (x) =>
+            x.prenda_id === l.prenda_id &&
+            x.talle === l.talle &&
+            x.color === l.color
+        );
+        return v ? [{ variante_id: v.id, cantidad: String(l.cantidad) }] : [];
+      })
+  );
+
+  const lineasParaEnviar = lineas.flatMap((l) => {
+    const v = variantes.find((x) => x.id === l.variante_id);
+    return v
+      ? [
+          {
+            prenda_id: v.prenda_id,
+            talle: v.talle,
+            color: v.color,
+            cantidad: l.cantidad,
+          },
+        ]
+      : [];
+  });
+
   const [d, setD] = useState({
     cliente_id: initial?.cliente_id ?? fixedClienteId ?? '',
     titulo: initial?.titulo ?? '',
@@ -203,7 +271,7 @@ function PedidoForm({
       className="crm-form"
       onSubmit={async (e) => {
         e.preventDefault();
-        await onSubmit(d);
+        await onSubmit({ ...d, lineas: lineasParaEnviar });
       }}
     >
       {!fixedClienteId && !initial && (
@@ -305,6 +373,87 @@ function PedidoForm({
           onChange={set('fecha_entrega')}
         />
       </label>
+
+      <div className="crm-lines">
+        Prendas del inventario (opcional)
+        {bloqueadas.length > 0 && (
+          <p className="inv-hint">
+            Ya descontadas del stock:{' '}
+            {bloqueadas
+              .map(
+                (l) =>
+                  `${nombrePrenda.get(l.prenda_id) ?? 'Prenda'} ${l.color} ${l.talle} ×${l.cantidad}`
+              )
+              .join(' · ')}
+          </p>
+        )}
+        {lineas.map((l, i) => (
+          <div className="pr-line" key={i}>
+            <select
+              value={l.variante_id}
+              onChange={(e) =>
+                setLineas(
+                  lineas.map((x, j) =>
+                    j === i ? { ...x, variante_id: e.target.value } : x
+                  )
+                )
+              }
+              required
+            >
+              <option value="">Elegí modelo, color y talle…</option>
+              {opciones.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {nombrePrenda.get(v.prenda_id)} · {v.color} · {v.talle} (hay{' '}
+                  {v.cantidad})
+                </option>
+              ))}
+            </select>
+            <input
+              type="number"
+              min={1}
+              step={1}
+              value={l.cantidad}
+              aria-label="Cantidad"
+              onChange={(e) =>
+                setLineas(
+                  lineas.map((x, j) =>
+                    j === i ? { ...x, cantidad: e.target.value } : x
+                  )
+                )
+              }
+            />
+            <button
+              type="button"
+              className="danger"
+              aria-label="Quitar prenda"
+              onClick={() => setLineas(lineas.filter((_, j) => j !== i))}
+            >
+              ✕
+            </button>
+          </div>
+        ))}
+        <div className="crm-actions">
+          <button
+            type="button"
+            onClick={() =>
+              setLineas([...lineas, { variante_id: '', cantidad: '1' }])
+            }
+          >
+            + AGREGAR PRENDA
+          </button>
+        </div>
+        {opciones.length === 0 ? (
+          <p className="inv-hint">
+            Todavía no hay prendas en el inventario. Cargalas en INVENTARIO para poder
+            asignarlas a un pedido.
+          </p>
+        ) : (
+          <p className="inv-hint">
+            Quedan apartadas cuando el pedido está aprobado, en producción o listo, y
+            se descuentan del stock al pasarlo a Entregado.
+          </p>
+        )}
+      </div>
 
       <div className="crm-form-actions">
         <button className="primary" disabled={busy}>
@@ -427,11 +576,17 @@ export default function CrmPanel({
   clientes,
   pedidos,
   seguimientos,
+  prendas,
+  variantes,
+  lineas,
   loadError,
 }: {
   clientes: Cliente[];
   pedidos: Pedido[];
   seguimientos: Seguimiento[];
+  prendas: Prenda[];
+  variantes: Variante[];
+  lineas: LineaPedido[];
   loadError: string | null;
 }) {
   const [tab, setTab] = useState<Tab>('pedidos');
@@ -478,6 +633,11 @@ export default function CrmPanel({
     [clientes]
   );
 
+  const nombrePrenda = useMemo(
+    () => new Map<string, string>(prendas.map((p) => [p.id, p.nombre])),
+    [prendas]
+  );
+
   const stats = useMemo(() => {
     const activos = pedidos.filter((p) => ESTADOS_ACTIVOS.includes(p.estado));
     const porCobrar = pedidos
@@ -509,6 +669,9 @@ export default function CrmPanel({
         <div className="crm-item" key={p.id}>
           <PedidoForm
             clientes={clientes}
+            prendas={prendas}
+            variantes={variantes}
+            lineasPedidos={lineas}
             initial={p}
             busy={busy}
             onCancel={() => setEditPedido(null)}
@@ -523,6 +686,7 @@ export default function CrmPanel({
     }
 
     const cli = clienteById.get(p.cliente_id);
+    const misLineas = lineas.filter((l) => l.pedido_id === p.id);
     const saldo = Math.max(0, (p.presupuesto_monto ?? 0) - (p.sena_monto ?? 0));
     const atrasado =
       !!p.fecha_entrega &&
@@ -569,12 +733,41 @@ export default function CrmPanel({
             className="crm-estado"
             value={p.estado}
             disabled={busy}
-            onChange={(e) =>
-              exec(
-                cambiarEstadoPedido(p.id, e.target.value as Estado),
-                `Estado: ${ESTADO_LABEL[e.target.value as Estado]}`
+            onChange={(e) => {
+              const nuevo = e.target.value as Estado;
+              const porDescontar = misLineas
+                .filter((l) => !l.descontado)
+                .reduce((s, l) => s + l.cantidad, 0);
+              const yaDescontadas = misLineas
+                .filter((l) => l.descontado)
+                .reduce((s, l) => s + l.cantidad, 0);
+
+              if (
+                nuevo === 'entregado' &&
+                porDescontar > 0 &&
+                !confirm(
+                  `Al marcar como entregado se descuentan ${porDescontar} prenda(s) del inventario. ¿Continuar?`
+                )
               )
-            }
+                return;
+
+              if (
+                p.estado === 'entregado' &&
+                nuevo !== 'entregado' &&
+                yaDescontadas > 0 &&
+                !confirm(
+                  `Se devuelven ${yaDescontadas} prenda(s) al inventario. ¿Continuar?`
+                )
+              )
+                return;
+
+              exec(
+                cambiarEstadoPedido(p.id, nuevo),
+                porDescontar > 0 && nuevo === 'entregado'
+                  ? `Entregado. Se descontaron ${porDescontar} prenda(s) del inventario.`
+                  : `Estado: ${ESTADO_LABEL[nuevo]}`
+              );
+            }}
           >
             {ESTADOS.map((s) => (
               <option key={s} value={s}>
@@ -585,6 +778,20 @@ export default function CrmPanel({
         </div>
 
         {p.descripcion && <div className="crm-sub">{p.descripcion}</div>}
+
+        {misLineas.length > 0 && (
+          <div className="crm-sub">
+            Prendas:{' '}
+            {misLineas
+              .map(
+                (l) =>
+                  `${nombrePrenda.get(l.prenda_id) ?? 'Prenda'} ${l.color} ${l.talle} ×${l.cantidad}${
+                    l.descontado ? ' ✓' : ''
+                  }`
+              )
+              .join(' · ')}
+          </div>
+        )}
 
         <div className="crm-money">
           <span>
@@ -649,6 +856,9 @@ export default function CrmPanel({
       {nuevoPedido && (
         <PedidoForm
           clientes={clientes}
+          prendas={prendas}
+          variantes={variantes}
+          lineasPedidos={lineas}
           busy={busy}
           onCancel={() => setNuevoPedido(false)}
           onSubmit={async (d) => {
@@ -770,6 +980,9 @@ export default function CrmPanel({
             {pedidoDeCliente === c.id ? (
               <PedidoForm
                 clientes={clientes}
+                prendas={prendas}
+                variantes={variantes}
+                lineasPedidos={lineas}
                 fixedClienteId={c.id}
                 busy={busy}
                 onCancel={() => setPedidoDeCliente(null)}

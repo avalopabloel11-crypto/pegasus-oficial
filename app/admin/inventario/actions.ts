@@ -39,6 +39,14 @@ const normTalle = (v: unknown): string | null => {
 
 type Db = ReturnType<typeof createAdminSupabase>;
 
+/** Traduce el error de Supabase; avisa si todavía no se ejecutó prendas_movimientos.sql. */
+const rpcFail = (e: { message: string; code?: string }): ActionResult =>
+  fail(
+    e.code === 'PGRST202'
+      ? 'Falta ejecutar prendas_movimientos.sql en el SQL Editor de Supabase.'
+      : e.message
+  );
+
 /** Verifica admin, ejecuta con la service role y refresca la página. */
 async function guard(
   fn: (db: Db) => Promise<ActionResult>
@@ -51,7 +59,10 @@ async function guard(
 
   try {
     const r = await fn(createAdminSupabase());
-    if (r.ok) revalidatePath('/admin/inventario');
+    if (r.ok) {
+      revalidatePath('/admin/inventario');
+      revalidatePath('/admin/crm');
+    }
     return r;
   } catch (e) {
     return fail(e instanceof Error ? e.message : 'Error inesperado.');
@@ -108,6 +119,8 @@ export async function eliminarPrenda(id: string): Promise<ActionResult> {
 }
 
 // ---------- stock por talle y color ----------
+// Todos los cambios pasan por funciones de la base (prendas_movimientos.sql):
+// actualizan el stock y escriben el historial en una sola transacción.
 
 /** Suma unidades a una combinación; si no existe todavía, la crea. */
 export async function agregarStock(d: {
@@ -115,6 +128,7 @@ export async function agregarStock(d: {
   color: string;
   talle: string;
   cantidad: number | string;
+  motivo?: string;
 }): Promise<ActionResult> {
   const color = normColor(d.color);
   const talle = normTalle(d.talle);
@@ -126,30 +140,14 @@ export async function agregarStock(d: {
   if (cantidad < 0) return fail('La cantidad no puede ser negativa.');
 
   return guard(async (db) => {
-    const ya = await db
-      .from('prendas_stock')
-      .select('id,cantidad')
-      .eq('prenda_id', d.prenda_id)
-      .eq('talle', talle)
-      .eq('color', color)
-      .maybeSingle();
-    if (ya.error) return fail(ya.error.message);
-
-    if (ya.data) {
-      const r = await db
-        .from('prendas_stock')
-        .update({
-          cantidad: Number(ya.data.cantidad) + cantidad,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', ya.data.id);
-      return r.error ? fail(r.error.message) : OK;
-    }
-
-    const r = await db
-      .from('prendas_stock')
-      .insert({ prenda_id: d.prenda_id, talle, color, cantidad });
-    return r.error ? fail(r.error.message) : OK;
+    const r = await db.rpc('agregar_stock', {
+      p_prenda_id: d.prenda_id,
+      p_talle: talle,
+      p_color: color,
+      p_cantidad: cantidad,
+      p_motivo: txt(d.motivo),
+    });
+    return r.error ? rpcFail(r.error) : OK;
   });
 }
 
@@ -162,19 +160,14 @@ export async function cambiarStock(
   if (!id || !Number.isFinite(cambio) || cambio === 0) return fail('Cambio inválido.');
 
   return guard(async (db) => {
-    const cur = await db
-      .from('prendas_stock')
-      .select('cantidad')
-      .eq('id', id)
-      .single();
-    if (cur.error) return fail(cur.error.message);
-
-    const nuevo = Math.max(0, Number(cur.data?.cantidad ?? 0) + cambio);
-    const r = await db
-      .from('prendas_stock')
-      .update({ cantidad: nuevo, updated_at: new Date().toISOString() })
-      .eq('id', id);
-    return r.error ? fail(r.error.message) : OK;
+    const r = await db.rpc('mover_stock', {
+      p_variante_id: id,
+      p_delta: cambio,
+      p_tipo: cambio > 0 ? 'entrada' : 'salida',
+      p_motivo: cambio > 0 ? 'Ingreso manual' : 'Salida manual',
+      p_pedido_id: null,
+    });
+    return r.error ? rpcFail(r.error) : OK;
   });
 }
 
@@ -188,11 +181,12 @@ export async function fijarStock(
   if (n === null || n < 0) return fail('Ingresá una cantidad de 0 o más.');
 
   return guard(async (db) => {
-    const r = await db
-      .from('prendas_stock')
-      .update({ cantidad: n, updated_at: new Date().toISOString() })
-      .eq('id', id);
-    return r.error ? fail(r.error.message) : OK;
+    const r = await db.rpc('fijar_stock', {
+      p_variante_id: id,
+      p_cantidad: n,
+      p_motivo: null,
+    });
+    return r.error ? rpcFail(r.error) : OK;
   });
 }
 
