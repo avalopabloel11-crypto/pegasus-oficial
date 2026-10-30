@@ -127,6 +127,15 @@ export default function AdminPanel({
         </button>
       </header>
 
+      <nav style={{ display: 'flex', gap: 8, padding: '16px 0 4px' }}>
+        <a className="filter active" href="/admin" style={{ textDecoration: 'none' }}>
+          DISEÑOS
+        </a>
+        <a className="filter" href="/admin/crm" style={{ textDecoration: 'none' }}>
+          CRM
+        </a>
+      </nav>
+
       <section className="admin-card">
         <h2>Agregar diseño</h2>
 
